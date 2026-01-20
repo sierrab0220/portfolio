@@ -1,0 +1,74 @@
+---
+title: "Stepwise_SENIC"
+format: html
+editor: visual
+---
+
+```{r}
+
+# load the MASS package
+library(MASS)
+```
+
+```{r}
+
+#Read data
+SENIC <- read.csv("SENIC.csv")
+
+#converting categorical to "factors" and facilities to "integer"
+SENIC$medSchool <- as.factor(SENIC$medSchool)
+SENIC$region <- as.factor(SENIC$region)
+SENIC$facilities <- as.integer(SENIC$facilities)
+
+str(SENIC)
+```
+
+```{r}
+
+# Full model with all predictors
+full_model <- lm(infectionRisk ~ stay + cultRatio + chestXrayRatio + numBeds + medSchool + region + avgDailyCensus + numNurses, data = SENIC)
+
+# Null model with no predictors
+null_model <- lm(infectionRisk ~ 1, data = SENIC)
+
+# Perform stepwise regression
+stepwise_model <- stepAIC(null_model, 
+                          scope = list(lower = null_model, upper = full_model), 
+                          direction = "both", 
+                          trace = 0)
+
+# Print the summary of the stepwise model
+summary(stepwise_model)
+```
+
+```{r}
+
+# Obtain residuals and fitted values
+residuals <- residuals(stepwise_model)
+fitted <- fitted(stepwise_model)
+```
+
+```{r}
+
+# Residuals vs Fitted Values
+plot(fitted, residuals,
+     main = "Residuals vs Fitted Values",
+     xlab = "Fitted Values",
+     ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+```
+
+```{r}
+
+# Calculate VIF values
+library(car)
+vif_values <- vif(stepwise_model)
+print(vif_values)
+```
+
+```{r}
+
+# Normal Q-Q Plot
+qqnorm(residuals, main = "Normal Q-Q")
+qqline(residuals, col = "red")
+```

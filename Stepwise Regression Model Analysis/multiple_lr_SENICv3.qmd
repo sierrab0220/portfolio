@@ -1,0 +1,214 @@
+---
+title: "Multiple Linear Regression Analysis of SENIC"
+format: html
+editor: visual
+---
+
+## Multiple Linear Regression Analysis
+
+The goal of this multiple linear regression analysis is to better understand and predict the relationship between the response (infectionRisk) and multiple predictors (stay, age, etc.).
+
+```{r}
+# Load data
+data <- read.csv("SENIC.csv")
+
+#converting categorical to "factors" and facilities to "integer"
+data$medSchool <- as.factor(data$medSchool)
+data$region <- as.factor(data$region)
+data$facilities <- as.integer(data$facilities)
+
+# Inspect data
+str(data)
+summary(data)
+any(is.na(data))
+```
+
+## From Simple Linear regression
+
+-   **b1 stay:** F-statistic: 44.15, p-value: 0.000000001177
+
+-   **b2 age:** F-statistic: 0.0001326, p-value: 0.9908 (not statistically significant, should exclude)
+
+-   **b3 cultRatio:** F-statistic: 50.49, p-value: 0.0000000001218
+
+-   **b4 chestXrayRatio:** F-statistic: 28.72, p-value: 0.0000004585
+
+-   **b5 medSchool:** F-statistic: 6.374, p-value: 0.013
+
+-   **b6 region:** F-statistic: 28.72, p-value: 0.0000004585
+
+-   **b7 numBeds:** F-statistic: 16.5, p-value: 0.00009087
+
+-   **b8 avgDailyCensus:** F-statistic: 18.9, p-value: 0.00003072
+
+-   **b9 numNurses:** F-statistic: 20.4, p-value: 0.00001578
+
+-   **b10 facilities:** F-statistic: 28.72, p-value: 0.0000004585
+
+```{r}
+# List of columns to exclude
+exclude_vars <- c("id")
+
+# Exclude categorical variables
+numeric_data <- data[ , !(names(data) %in% exclude_vars)]
+
+# Defining response
+response <- "infectionRisk"
+
+# Get the names of all predictors excluding categorical
+predictors <- setdiff(names(numeric_data), response)
+
+# Initialize a list to keep predictors with F-stat > 1
+selected_predictors <- c()
+
+# Loop through each predictor and run a simple linear regression
+for (predictor in predictors) {
+  formula <- as.formula(paste(response, "~", predictor))
+  simple_lm <- lm(formula, data=numeric_data)
+  f_stat <- summary(simple_lm)$fstatistic[1]
+  cat("Simple linear regression for predictor:", predictor, "\n")
+  print(summary(simple_lm))
+  cat("\n")
+  
+  # Check if F-statistic is greater than 1
+  if (f_stat > 1) {
+    selected_predictors <- c(selected_predictors, predictor)
+  }
+}
+
+# Display the selected predictors
+cat("Selected predictors with F-stat > 1:", selected_predictors, "\n")
+
+```
+
+## Correlation Matrix
+
+Multicollinearity will be suggested with coefficient values for pairs closer to 1 or -1 (strong positive or strong negative) which may impact stability of model. In this model, pairs of interest are:
+
+-   numNurses \~ avgDailyCensus
+
+-   numNurses \~ numBeds
+
+-   numBeds \~ avgDailyCensus
+
+![](images/clipboard-3732193728.png)
+
+```{r}
+# Correlation matrix among predictors (while displaying above the diagonal)
+cor_matrix <- cor(numeric_data[predictors])
+cor_matrix_upper <- cor_matrix
+cor_matrix_upper[!upper.tri(cor_matrix_upper)] <- NA
+print(cor_matrix_upper)
+```
+
+## Model Summary
+
+**model:** Predicted infectionRisk = b0 + (b~1~ × stay )+ (b~3~ × cultRatio)+ (b~4~ × chestXrayRatio) + (b~5~× numBeds) + (b~6~ × avgDailyCensus)+ (b~7~ × numNurses) + e
+
+### Hypothesis
+
+**Ho:** β~1~ ​= β~2~ ​= β~3~ ​= β~4~ ​= β~5~ ​= β~6~ ​= β~7~ ​= 0
+
+**Ha:** At least one β~i~ !~~=~~ 0 for i = 1, 2, ..., 7
+
+**Decision:** Since the f-statistic is larger than 1 (15.1) and p-value is 0.000000000000002191 which is significantly less than alpha = 0.05, reject Ho in favor of the alternative.
+
+```{r}
+# Construct the formula for multiple linear regression using selected predictors
+if (length(selected_predictors) > 0) {
+  formula <- as.formula(paste(response, "~", paste(selected_predictors, collapse=" + ")))
+  
+  # Run multiple linear regression
+  multiple_lm <- lm(formula, data=numeric_data)
+  summary(multiple_lm)
+} else {
+  cat("No predictors with F-stat > 1\n")
+}
+```
+
+## Considerations
+
+### Variance Inflation Factor (VIF)
+
+![](images/clipboard-3164435636.png)
+
+The results suggest strong variance inflationhigh multicollinearity with values greater than 10. In this case, numBeds and avgDailyCensus indicate a strong linear relationship with other predictors (multicollinearity) which may need to be addressed as it may impact the overall model. Based on the results, it is recommended to remove predictors numBeds and avgDailyCensus. It is worth noting that numNurses is close to the threshold for a strong variance inflation and should be monitored.
+
+```{r}
+# Calculate VIF values
+library(car)
+vif_values <- vif(multiple_lm)
+print(vif_values)
+```
+
+### Model fit: R-squared and Adjusted R-squared
+
+The R-squared value of 0.58 indicates that 58% of the variance in the response, infectionRisk, can be explained by the predictors (stay, age, cultRatio, chestXrayRatio, numBeds, medSchool, region, avgDailyCensus, numNurses, facilities) in the model. This suggests that the model has a decent fit to the data, capturing some of the variability, of the predictors we have analyzed. (Note: we still have categorical predictors to analyze which could further impact the variability).
+
+The Adjusted R-squared value of 0.53 accounts for the number of predictors in the model and indicates that 53.8% of the variance in infectionRisk is explained by the model when adjusting for the number of predictors.
+
+This moderate fit indicates that while the model captures some of the factors affecting infection risk, there is still substantial variability that the model does not explain, and there may be room to improve the model by considering additional predictors (like the qualitative variables) and/ or refining the existing ones.
+
+```{r}
+# Interpretations for R-squared
+rsq <- summary(multiple_lm)$r.squared
+adj_rsq <- summary(multiple_lm)$adj.r.squared
+cat("R-squared:", rsq, "\n")
+cat("Adjusted R-squared:", adj_rsq, "\n")
+```
+
+### Distribution: Normality of Residuals
+
+**Ho:** The residuals follow a normal distribution
+
+**Ha:** The residuals do not follow a normal distribution
+
+**Decision:** Since the p-value from the Shapiro-Wilk is 0.3651 which is greater than alpha = 0.05, fail to reject Ho and reject Ha. This suggests that the data appears to be normally distributed.
+
+```{r}
+# QQ Plot for normality
+qqnorm(multiple_lm$residuals)
+qqline(multiple_lm$residuals)
+```
+
+```{r}
+#Shapiro-Wilk: Test for normality of residuals
+shapiro.test(resid(multiple_lm))
+```
+
+### Variance: Homoscedasticity
+
+**Ho:** The variance of the residuals is constant (homoscedasticity).
+
+**Ha:** The variance of the residuals is not constant (heteroscedasticity).
+
+**Decision:** Since the p-value from the Breusch-Pagan is 0.4411 which is greater than alpha = 0.05, fail to reject Ho and reject Ha. There is no evidence of heteroscedasticity.
+
+```{r}
+# Residual plot for homoscedasticity
+plot(multiple_lm$fitted.values, multiple_lm$residuals, xlab="Fitted values", ylab="Residuals")
+abline(h=0, col="red")
+```
+
+```{r}
+#Breusch-Pagan Test
+library(lmtest)
+bp_test_result <- bptest(multiple_lm)
+print(bp_test_result)
+```
+
+### Leverage
+
+```{r}
+# Compute leverage values
+leverage <- hatvalues(multiple_lm)
+cutoff <- 4 / nrow(numeric_data)
+#leverage_df <- data.frame(Index=1:nrow(numeric_data), Leverage=leverage)
+leverage_df <- cbind(numeric_data, Leverage=leverage)
+high_leverage_points <- leverage_df[leverage_df$Leverage > cutoff, ]
+print(high_leverage_points, row.names=FALSE)
+
+# Plot leverages
+plot(leverage, main = "Leverage Plot", xlab = "Observation Index", ylab = "Leverage")
+abline(h = cutoff, col = "red", lty = 2)
+```
